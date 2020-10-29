@@ -159,3 +159,4 @@ if __name__ == '__main__':
     df_columns = ["project_name", "number_of_fields", "completion_pct", "number_of_records"]
     grades_df = pandas.DataFrame(grades, columns=df_columns)
     print(grades_df)
+    grades_df.to_csv("downloads/mgh_2020_grades.csv", index=False)
