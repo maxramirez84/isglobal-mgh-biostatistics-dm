@@ -5,6 +5,8 @@ import pandas
 import redcap
 import tokens
 
+from sqlalchemy import create_engine
+
 __author__ = "Maximo Ramirez Robles"
 __copyright__ = "Copyright 2020, ISGlobal MHG2020"
 __credits__ = ["Maximo Ramirez Robles"]
@@ -35,6 +37,22 @@ def get_data_dictionary(url, token):
     return field_names
 
 
+def get_project_id(url, token):
+    """Retrieve from the REDCap the id of the project.
+
+    :param url: The URL of the REDCap API
+    :type url: str
+    :param token: The token for authentication in the REDCap API
+    :type token: str
+    :return: The id of the project
+    :rtype: int
+    """
+    project = redcap.Project(url, token)
+    info = project.export_project_info()
+
+    return info['project_id']
+
+
 def get_project_name(url, token):
     """Retrieve from the REDCap the name of the project.
 
@@ -49,22 +67,6 @@ def get_project_name(url, token):
     info = project.export_project_info()
 
     return info['project_title']
-
-
-def get_number_of_fields(url, token):
-    """Retrieve from the REDCap the number of fields created in a project data dictionary.
-
-    :param url: The URL of the REDCap API
-    :type url: str
-    :param token: The token for authentication in the REDCap API
-    :type token: str
-    :return: Number of fields in the project data dictionary
-    :rtype: int
-    """
-    project = redcap.Project(url, token)
-    metadata = project.export_metadata()
-
-    return len(metadata)
 
 
 def get_number_of_records(url, token):
@@ -123,6 +125,7 @@ def compute_student_performance(url, token):
         - Completion percentage, i.e. number of fields designed by the student divided by the total number of fields in
           the master solution.
         - Number of records created by the student with her data collection instrument.
+        - Number of data quality rules designed.
 
     :param url: The URL of the REDCap API
     :type url: str
@@ -131,14 +134,36 @@ def compute_student_performance(url, token):
     :return: The list of computed student indicators
     :rtype: list
     """
+    project_id = get_project_id(url, token)
     project_name = get_project_name(url, token)
-    number_of_fields = get_number_of_fields(url, token)
     student_dic = get_data_dictionary(url, token)
+    number_of_fields = len(student_dic)
     completion_pct = compute_completion_pct(master_dic, student_dic)
     number_of_records = get_number_of_records(url, token)
-    evaluation = [project_name, number_of_fields, completion_pct, number_of_records]
+
+    evaluation = [project_id, project_name, number_of_fields, completion_pct, number_of_records]
 
     return evaluation
+
+
+def get_all_data_quality_rules(db_host, db_name, db_user, db_pass):
+    """Retrieve all rows from the redcap_data_quality_rules database table.
+
+    :param db_host: Database host
+    :type db_host: str
+    :param db_name: Database name
+    :type db_name: str
+    :param db_user: Database user
+    :type db_user: str
+    :param db_pass: Database password
+    :type db_pass: str
+    :return: A data frame with the table rows
+    :rtype: DataFrame
+    """
+    engine = create_engine("mysql+pymysql://" + db_user + ":" + db_pass + "@" + db_host + "/" + db_name)
+    dqr = pandas.read_sql("redcap_data_quality_rules", engine)
+
+    return dqr
 
 
 if __name__ == '__main__':
@@ -149,14 +174,22 @@ if __name__ == '__main__':
 
     grades = []
     for api_token in tokens.API_TOKEN_20:
-        # Compute student performance indicators on homeworks S3 and S4
+        # Compute student performance indicators
         student_eval = compute_student_performance(URL, api_token)
         grades.append(student_eval)
 
         # Download and store student data dictionary and quality rules
         download_data_dictionary(URL, api_token)
 
-    df_columns = ["project_name", "number_of_fields", "completion_pct", "number_of_records"]
+    df_columns = ["project_id", "project_name", "number_of_fields", "completion_pct", "number_of_records"]
     grades_df = pandas.DataFrame(grades, columns=df_columns)
+
+    # Get redcap_data_quality_rules table and compute the number of rules created in the master and each student project
+    grades_df["number_of_dqr"] = 0
+    rules = get_all_data_quality_rules(tokens.DB_HOST, tokens.DB_NAME, tokens.DB_USER, tokens.DB_PASS)
+    counts = rules['project_id'].value_counts()
+    for pid, number_of_dqr in counts.items():
+        grades_df.loc[grades_df.project_id == pid, 'number_of_dqr'] = number_of_dqr
+
     print(grades_df)
     grades_df.to_csv("downloads/mgh_2020_grades.csv", index=False)
