@@ -192,4 +192,9 @@ if __name__ == '__main__':
         grades_df.loc[grades_df.project_id == pid, 'number_of_dqr'] = number_of_dqr
 
     print(grades_df)
+
+    # Write and store grades and student data quality rules into two files in dowloads folder
     grades_df.to_csv("downloads/mgh_2020_grades.csv", index=False)
+
+    student_rules = rules[rules.project_id.isin(grades_df.project_id)]
+    student_rules.to_csv("downloads/mgh_2020_dqr.csv", index=False)
