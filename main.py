@@ -167,7 +167,7 @@ def get_all_data_quality_rules(db_host, db_name, db_user, db_pass):
 
 
 if __name__ == '__main__':
-    URL = "https://datacapture.isglobal.org/api/"
+    URL = tokens.URL
 
     # Get MASTER data dictionary to be compared against students' dictionaries
     master_dic = get_data_dictionary(URL, tokens.API_TOKEN_20[0])
